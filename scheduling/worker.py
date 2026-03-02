@@ -108,6 +108,13 @@ async def _send_extra_message(bot, user_id: int, day_index: int, extra: dict, kb
     return await bot.send_message(chat_id=user_id, text=text, reply_markup=kb)
 
 
+def _resolve_for_date(schedule, user_id: int, for_date_s: str | None):
+    if for_date_s:
+        return datetime.fromisoformat(for_date_s).date()
+    user_tz = schedule._user_tz(user_id)
+    return datetime.now(timezone.utc).astimezone(user_tz).date()
+
+
 async def tick(context: ContextTypes.DEFAULT_TYPE, services: dict):
     # Create new outbox jobs (lessons/quests + daily reminder) and then deliver due ones
     services["schedule"].schedule_due_jobs()
@@ -200,6 +207,12 @@ async def _process_outbox(context: ContextTypes.DEFAULT_TYPE, services: dict):
                 for_date_s = payload.get("for_date")
                 lesson = payload.get("lesson")
                 if lesson:
+                    for_date = _resolve_for_date(schedule, user_id, for_date_s)
+                    if learning.has_viewed_lesson(user_id, day_index):
+                        schedule.sent_jobs.mark_sent(user_id, "lesson", day_index, for_date)
+                        outbox.mark_sent(job_id)
+                        continue
+
                     pts = int(lesson.get("points_viewed") or 0)
                     viewed_cb = schedule.make_viewed_cb(day_index, pts)
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton("Просмотрено", callback_data=viewed_cb)]])
@@ -234,6 +247,12 @@ async def _process_outbox(context: ContextTypes.DEFAULT_TYPE, services: dict):
                 for_date_s = payload.get("for_date")
                 quest = payload.get("quest")
                 if quest:
+                    for_date = _resolve_for_date(schedule, user_id, for_date_s)
+                    if learning.has_quest_answer(user_id, day_index):
+                        schedule.sent_jobs.mark_sent(user_id, "quest", day_index, for_date)
+                        outbox.mark_sent(job_id)
+                        continue
+
                     reply_cb = f"{cb.QUEST_REPLY_PREFIX}{day_index}"
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton("✍️ Ответить на задание", callback_data=reply_cb)]])
                     msg = await _send_quest_message(context.bot, user_id, day_index, quest, kb)
@@ -266,8 +285,13 @@ async def _process_outbox(context: ContextTypes.DEFAULT_TYPE, services: dict):
                 for_date_s = payload.get("for_date")
                 extra = payload.get("extra")
                 if extra:
+                    for_date = _resolve_for_date(schedule, user_id, for_date_s)
                     extra_id = int(extra.get("id") or 0)
                     points = int(extra.get("points") or 0)
+                    if extra_id > 0 and learning.points.has_entry(user_id, "extra_viewed", f"extra:{extra_id}"):
+                        schedule.sent_jobs.mark_sent(user_id, "extra", day_index, for_date)
+                        outbox.mark_sent(job_id)
+                        continue
                     kb = None
                     if extra_id > 0:
                         viewed_cb = schedule.make_extra_viewed_cb(extra_id, points)
@@ -365,6 +389,12 @@ async def _process_outbox(context: ContextTypes.DEFAULT_TYPE, services: dict):
                 for_date_s = payload.get("for_date")
                 for_date = datetime.fromisoformat(for_date_s).date() if for_date_s else None
                 is_optional = bool(payload.get("optional"))
+                if qsvc.has_response(user_id, qid):
+                    if (not is_optional) and day_index and for_date:
+                        q_content_type = schedule.questionnaire_content_type(qid)
+                        schedule.sent_jobs.mark_sent(user_id, q_content_type, day_index, for_date)
+                    outbox.mark_sent(job_id)
+                    continue
                 item = qsvc.get(qid)
                 if not item:
                     outbox.mark_sent(job_id)

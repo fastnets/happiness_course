@@ -1093,6 +1093,20 @@ def register_user_handlers(app, settings: Settings, services: dict):
             texts.REMINDERS_EDIT,
             texts.REMINDERS_DELETE,
         }
+        if st_any and st_any.get("step") == "wait_q_comment":
+            if text == texts.BTN_BACK:
+                user_svc.set_step(uid, None)
+                await update.effective_message.reply_text(
+                    "Ок, вернул в главное меню.",
+                    reply_markup=menus.kb_main(_is_admin(uid)),
+                )
+                raise ApplicationHandlerStop
+            if text in nav_texts:
+                await update.effective_message.reply_text(
+                    "Сначала напиши короткий комментарий к анкете одним сообщением.",
+                )
+                raise ApplicationHandlerStop
+            return
         if st_any and st_any.get("step") and st_any.get("step") not in user_steps:
             if text in nav_texts:
                 # User explicitly navigates away — cancel the pending flow.
@@ -1801,6 +1815,20 @@ def register_user_handlers(app, settings: Settings, services: dict):
             texts.REMINDERS_EDIT,
             texts.REMINDERS_DELETE,
         }
+        if st_any and st_any.get("step") == "wait_q_comment":
+            if text == texts.BTN_BACK:
+                user_svc.set_step(uid, None)
+                await update.effective_message.reply_text(
+                    "Ок, вернул в главное меню.",
+                    reply_markup=menus.kb_main(_is_admin(uid)),
+                )
+                raise ApplicationHandlerStop
+            if text in nav_texts:
+                await update.effective_message.reply_text(
+                    "Сначала напиши короткий комментарий к анкете одним сообщением.",
+                )
+                raise ApplicationHandlerStop
+            return
         if st_any and st_any.get("step") and st_any.get("step") not in user_steps and text not in nav_texts:
             return
         if st_any and st_any.get("step") and st_any.get("step") not in user_steps and text in nav_texts:
