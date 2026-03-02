@@ -2215,7 +2215,11 @@ def register_user_handlers(app, settings: Settings, services: dict):
 
         if text == texts.SETTINGS_TZ:
             user_svc.set_step(uid, STEP_WAIT_TZ, {})
-            await update.effective_message.reply_text("🕒 Выбери часовой пояс:", reply_markup=menus.kb_timezone())
+            tz_text = user_svc.get_timezone(uid) or settings.default_timezone
+            await update.effective_message.reply_text(
+                f"🕒 Выбери часовой пояс:\nТекущий часовой пояс: {tz_text}",
+                reply_markup=menus.kb_timezone(),
+            )
             raise ApplicationHandlerStop
 
         if text == texts.SETTINGS_TIME:
