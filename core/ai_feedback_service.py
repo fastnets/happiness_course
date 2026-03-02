@@ -298,6 +298,54 @@ class AiFeedbackService:
         data = try_download("POST")
         return data
 
+    async def fallback_reply(
+        self,
+        user_name: str,
+        user_text: str,
+        history: Optional[list[dict[str, str]]] = None,
+    ) -> Optional[str]:
+        """Generic fallback reply for free-text messages outside active flows."""
+
+        user_text = (user_text or "").strip()
+        if not user_text:
+            return None
+
+        system = (
+            "You are the assistant of a wellbeing course Telegram bot. "
+            "Reply in the user's language and continue the current dialog naturally. "
+            "First, answer the user's latest message directly and concretely. "
+            "Do not re-introduce yourself and do not greet repeatedly in each reply. "
+            "Do not claim that you cannot see previous messages when context is provided. "
+            "Avoid generic repeated phrases and long lists of unrelated options. "
+            "Keep it concise (1-4 sentences), helpful, and specific to the current topic. "
+            "If context is still insufficient, ask one short clarifying question. "
+            "Do not invent facts and do not promise actions outside chat."
+        )
+
+        history_lines: list[str] = []
+        for row in (history or []):
+            role = (row or {}).get("role")
+            content = str((row or {}).get("content") or "").strip()
+            if not content:
+                continue
+            speaker = "User" if role == "user" else "Assistant"
+            history_lines.append(f"{speaker}: {content[:500]}")
+
+        history_block = ""
+        if history_lines:
+            history_block = "Recent dialog:\n" + "\n".join(history_lines[-20:]) + "\n\n"
+
+        uname = (user_name or "").strip()
+        if uname:
+            user = f"{history_block}User: {uname}\nMessage: {user_text}"
+        else:
+            user = f"{history_block}User message: {user_text}"
+
+        def _call() -> Optional[str]:
+            return self._chat(system=system, user=user)
+
+        return await asyncio.to_thread(_call)
+
     # -------------------------------------------------
     # PUBLIC API used by handlers
     # -------------------------------------------------
