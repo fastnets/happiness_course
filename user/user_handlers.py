@@ -101,6 +101,33 @@ def register_user_handlers(app, settings: Settings, services: dict):
     pr_schedule = services.get("personal_reminder_schedule")
     support_svc = services.get("support")
     mood_svc = services.get("mood")
+    ai = services.get("ai")
+
+    ai_fallback_pairs = int(getattr(settings, "ai_fallback_history_pairs", 10) or 10)
+    if ai_fallback_pairs < 1:
+        ai_fallback_pairs = 1
+    if ai_fallback_pairs > 20:
+        ai_fallback_pairs = 20
+    ai_fallback_max_messages = ai_fallback_pairs * 2
+    ai_fallback_history: dict[int, list[dict[str, str]]] = {}
+
+    def _ai_history_get(uid: int) -> list[dict[str, str]]:
+        rows = ai_fallback_history.setdefault(uid, [])
+        if len(rows) > ai_fallback_max_messages:
+            del rows[:-ai_fallback_max_messages]
+        return rows
+
+    def _ai_history_add(uid: int, role: str, text: str):
+        val = (text or "").strip()
+        if not val:
+            return
+        rows = _ai_history_get(uid)
+        rows.append({"role": role, "content": val[:500]})
+        if len(rows) > ai_fallback_max_messages:
+            del rows[:-ai_fallback_max_messages]
+
+    def _ai_history_clear(uid: int):
+        ai_fallback_history.pop(uid, None)
 
     def _is_admin(uid: int) -> bool:
         try:
@@ -546,6 +573,7 @@ def register_user_handlers(app, settings: Settings, services: dict):
         u = update.effective_user
         display_name = u.first_name or u.full_name or (u.username or "")
         user_svc.ensure_user(u.id, u.username, display_name)
+        _ai_history_clear(u.id)
 
         if not user_svc.has_pd_consent(u.id):
             user_svc.set_step(u.id, STEP_PD_CONSENT, {})
@@ -1696,6 +1724,42 @@ def register_user_handlers(app, settings: Settings, services: dict):
                     log.exception("Failed to send support ticket notification to admin_id=%s", admin_id)
             raise ApplicationHandlerStop
 
+    async def _ai_fallback_text(uid: int, user_text: str) -> str | None:
+        if not ai:
+            return None
+        try:
+            enabled_fn = getattr(ai, "enabled", None)
+            if callable(enabled_fn) and not enabled_fn():
+                return None
+
+            fallback_fn = getattr(ai, "fallback_reply", None)
+            if not callable(fallback_fn):
+                return None
+
+            display_name = ""
+            try:
+                prof = analytics.profile(uid)
+                display_name = (prof.get("display_name") or "").strip()
+            except Exception:
+                display_name = ""
+
+            history = list(_ai_history_get(uid))
+            timeout_sec = float(getattr(settings, "ai_fallback_timeout_sec", 6) or 6)
+            reply = await asyncio.wait_for(
+                fallback_fn(user_name=display_name, user_text=user_text, history=history),
+                timeout=timeout_sec,
+            )
+            if reply:
+                _ai_history_add(uid, "user", user_text)
+                _ai_history_add(uid, "assistant", reply)
+            return reply
+        except asyncio.TimeoutError:
+            log.warning("AI fallback timeout user_id=%s", uid)
+            return None
+        except Exception:
+            log.exception("AI fallback failed user_id=%s", uid)
+            return None
+
     # ----------------------------
     # Main navigation (ReplyKeyboard)
     # ----------------------------
@@ -2238,10 +2302,17 @@ def register_user_handlers(app, settings: Settings, services: dict):
             )
             raise ApplicationHandlerStop
 
-        # Unknown text
-        await update.effective_message.reply_text(
-            "Выбери пункт меню 👇", reply_markup=menus.kb_main(_is_admin(uid))
-        )
+        # Unknown text -> AI fallback (only outside active flows)
+        ai_text = await _ai_fallback_text(uid, text)
+        if ai_text:
+            await update.effective_message.reply_text(
+                ai_text,
+                reply_markup=menus.kb_main(_is_admin(uid)),
+            )
+        else:
+            await update.effective_message.reply_text(
+                "Выбери пункт меню 👇", reply_markup=menus.kb_main(_is_admin(uid))
+            )
         raise ApplicationHandlerStop
 
     # ----------------------------
