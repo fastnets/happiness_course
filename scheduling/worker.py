@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import json
+import time
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from event_bus import callbacks as cb
@@ -115,15 +116,28 @@ def _resolve_for_date(schedule, user_id: int, for_date_s: str | None):
     return datetime.now(timezone.utc).astimezone(user_tz).date()
 
 
+_PLAN_EVERY_SECONDS = 30
+_last_plan_ts = 0.0
+
+
 async def tick(context: ContextTypes.DEFAULT_TYPE, services: dict):
-    # Create new outbox jobs (lessons/quests + daily reminder) and then deliver due ones
-    services["schedule"].schedule_due_jobs()
-    # Create habit reminder jobs (occurrences + outbox)
-    if services.get("habit_schedule"):
-        services["habit_schedule"].schedule_due_jobs()
-    # Create personal reminder jobs (outbox)
-    if services.get("personal_reminder_schedule"):
-        services["personal_reminder_schedule"].schedule_due_jobs()
+    global _last_plan_ts
+
+    # Plan jobs less frequently (heavy DB work), but process outbox on every tick.
+    now_ts = time.time()
+    if (now_ts - _last_plan_ts) >= _PLAN_EVERY_SECONDS:
+        try:
+            # Create new outbox jobs (lessons/quests + daily reminder).
+            services["schedule"].schedule_due_jobs()
+            # Create habit reminder jobs (occurrences + outbox).
+            if services.get("habit_schedule"):
+                services["habit_schedule"].schedule_due_jobs()
+            # Create personal reminder jobs (outbox).
+            if services.get("personal_reminder_schedule"):
+                services["personal_reminder_schedule"].schedule_due_jobs()
+        finally:
+            _last_plan_ts = now_ts
+
     await _process_outbox(context, services)
 
 

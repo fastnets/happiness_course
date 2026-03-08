@@ -272,6 +272,16 @@ def register_user_handlers(app, settings: Settings, services: dict):
         )
 
     @staticmethod
+    def _mood_emoji(score: int) -> str:
+        return {
+            1: "☹️",
+            2: "🙁",
+            3: "😐",
+            4: "😄",
+            5: "😁",
+        }.get(int(score or 0), "")
+
+    @staticmethod
     def _mood_menu_markup() -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
@@ -287,6 +297,13 @@ def register_user_handlers(app, settings: Settings, services: dict):
     def _mood_rate_markup() -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
+                [
+                    InlineKeyboardButton("☹️", callback_data=f"{MOOD_SET_PREFIX}1"),
+                    InlineKeyboardButton("🙁", callback_data=f"{MOOD_SET_PREFIX}2"),
+                    InlineKeyboardButton("😐", callback_data=f"{MOOD_SET_PREFIX}3"),
+                    InlineKeyboardButton("😄", callback_data=f"{MOOD_SET_PREFIX}4"),
+                    InlineKeyboardButton("😁", callback_data=f"{MOOD_SET_PREFIX}5"),
+                ],
                 [
                     InlineKeyboardButton("1", callback_data=f"{MOOD_SET_PREFIX}1"),
                     InlineKeyboardButton("2", callback_data=f"{MOOD_SET_PREFIX}2"),
@@ -1019,7 +1036,7 @@ def register_user_handlers(app, settings: Settings, services: dict):
 
         if data == MOOD_RATE_CB:
             await q.edit_message_text(
-                "Оцени настроение за сегодня (1-5):",
+                "Оцени настроение за сегодня:",
                 reply_markup=_mood_rate_markup(),
             )
             return
@@ -1034,8 +1051,9 @@ def register_user_handlers(app, settings: Settings, services: dict):
             if not row:
                 await context.bot.send_message(chat_id=uid, text="⚠️ Не смог сохранить настроение.")
                 return
+            mood_icon = _mood_emoji(score)
             await q.edit_message_text(
-                f"✅ Сохранил настроение за сегодня: {score}/5",
+                f"✅ Сохранил настроение за сегодня: {mood_icon} ({score}/5)",
                 reply_markup=_mood_menu_markup(),
             )
             return
@@ -1110,8 +1128,11 @@ def register_user_handlers(app, settings: Settings, services: dict):
             texts.SETTINGS_TIME,
             texts.SETTINGS_NAME,
             texts.SETTINGS_TZ,
+            texts.SETTINGS_REMINDERS,
             texts.SETTINGS_HABITS,
             texts.SETTINGS_PERSONAL_REMINDERS,
+            texts.REMINDERS_HUB_HABITS,
+            texts.REMINDERS_HUB_ONCE,
             texts.HABITS_CREATE,
             texts.HABITS_LIST,
             texts.HABITS_EDIT,
@@ -1777,8 +1798,11 @@ def register_user_handlers(app, settings: Settings, services: dict):
             texts.HELP_NOT_HELPED,
             texts.MENU_ADMIN,
             texts.BTN_BACK,
+            texts.SETTINGS_REMINDERS,
             texts.SETTINGS_HABITS,
             texts.SETTINGS_PERSONAL_REMINDERS,
+            texts.REMINDERS_HUB_HABITS,
+            texts.REMINDERS_HUB_ONCE,
             texts.HABITS_CREATE,
             texts.HABITS_LIST,
             texts.HABITS_EDIT,
@@ -1868,8 +1892,11 @@ def register_user_handlers(app, settings: Settings, services: dict):
             texts.SETTINGS_TIME,
             texts.SETTINGS_NAME,
             texts.SETTINGS_TZ,
+            texts.SETTINGS_REMINDERS,
             texts.SETTINGS_HABITS,
             texts.SETTINGS_PERSONAL_REMINDERS,
+            texts.REMINDERS_HUB_HABITS,
+            texts.REMINDERS_HUB_ONCE,
             texts.HABITS_CREATE,
             texts.HABITS_LIST,
             texts.HABITS_EDIT,
@@ -1928,7 +1955,7 @@ def register_user_handlers(app, settings: Settings, services: dict):
             _evaluate_achievements(uid)
             await update.effective_message.reply_text(
                 _progress_text(uid),
-                reply_markup=menus.kb_progress(),
+                reply_markup=menus.kb_main(_is_admin(uid)),
             )
             raise ApplicationHandlerStop
 
@@ -2094,14 +2121,21 @@ def register_user_handlers(app, settings: Settings, services: dict):
             _evaluate_achievements(uid)
             await update.effective_message.reply_text(
                 _progress_text(uid),
-                reply_markup=menus.kb_progress(),
+                reply_markup=menus.kb_main(_is_admin(uid)),
             )
             raise ApplicationHandlerStop
 
         # Settings submenu
-        if text == texts.SETTINGS_HABITS:
+        if text == texts.SETTINGS_REMINDERS:
             await update.effective_message.reply_text(
-                "✅ Мои привычки\n\nВыбери действие:",
+                "🔔 Напоминания\n\nВыбери тип:",
+                reply_markup=menus.kb_reminders_hub(),
+            )
+            raise ApplicationHandlerStop
+
+        if text in (texts.SETTINGS_HABITS, texts.REMINDERS_HUB_HABITS):
+            await update.effective_message.reply_text(
+                "✅ Привычки с отметкой\n\nВыбери действие:",
                 reply_markup=menus.kb_habits(),
             )
             raise ApplicationHandlerStop
@@ -2170,7 +2204,7 @@ def register_user_handlers(app, settings: Settings, services: dict):
             )
             raise ApplicationHandlerStop
 
-        if text == texts.SETTINGS_PERSONAL_REMINDERS:
+        if text in (texts.SETTINGS_PERSONAL_REMINDERS, texts.REMINDERS_HUB_ONCE):
             await update.effective_message.reply_text(
                 "🔔 Мои напоминания\n\nВыбери действие:",
                 reply_markup=menus.kb_personal_reminders(),

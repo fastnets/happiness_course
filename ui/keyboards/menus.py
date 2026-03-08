@@ -28,7 +28,7 @@ def kb_day() -> ReplyKeyboardMarkup:
 
 def kb_progress() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(texts.PROGRESS_REFRESH)], [KeyboardButton(texts.BTN_BACK)]],
+        [[KeyboardButton(texts.BTN_BACK)]],
         resize_keyboard=True,
     )
 
@@ -38,7 +38,18 @@ def kb_settings() -> ReplyKeyboardMarkup:
         [
             [KeyboardButton(texts.SETTINGS_TIME), KeyboardButton(texts.SETTINGS_TZ)],
             [KeyboardButton(texts.SETTINGS_NAME)],
-            [KeyboardButton(texts.SETTINGS_HABITS), KeyboardButton(texts.SETTINGS_PERSONAL_REMINDERS)],
+            [KeyboardButton(texts.SETTINGS_REMINDERS)],
+            [KeyboardButton(texts.BTN_BACK)],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def kb_reminders_hub() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton(texts.REMINDERS_HUB_HABITS)],
+            [KeyboardButton(texts.REMINDERS_HUB_ONCE)],
             [KeyboardButton(texts.BTN_BACK)],
         ],
         resize_keyboard=True,

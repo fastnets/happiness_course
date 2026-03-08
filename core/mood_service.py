@@ -6,6 +6,14 @@ from zoneinfo import ZoneInfo
 from entity.repositories.mood_repo import MoodRepo
 from entity.repositories.users_repo import UsersRepo
 
+MOOD_EMOJI = {
+    1: "☹️",
+    2: "🙁",
+    3: "😐",
+    4: "😄",
+    5: "😁",
+}
+
 
 class MoodService:
     def __init__(self, db, settings):
@@ -51,18 +59,24 @@ class MoodService:
 
         lines = [f"😊 Настроение за {safe_days} дн.", ""]
         scores = []
+        distribution = {k: 0 for k in MOOD_EMOJI}
         for row in rows:
             d = row["local_date"]
             score = int(row["score"] or 0)
             if score > 0:
                 scores.append(score)
-            bar = "█" * score if score > 0 else "-"
-            score_label = str(score) if score > 0 else "нет"
-            lines.append(f"• {d.strftime('%d.%m')}: {bar} ({score_label})")
+                distribution[score] = distribution.get(score, 0) + 1
+                icon = MOOD_EMOJI.get(score, "")
+                bar = "█" * score
+                lines.append(f"• {d.strftime('%d.%m')}: {icon} {bar} ({score})")
+            else:
+                lines.append(f"• {d.strftime('%d.%m')}: — (нет)")
 
         if scores:
             avg = sum(scores) / len(scores)
             lines.append("")
             lines.append(f"Среднее по заполненным дням: {avg:.2f}")
+            dist = " | ".join(f"{MOOD_EMOJI[k]} {distribution[k]}" for k in sorted(MOOD_EMOJI.keys()))
+            lines.append(f"Распределение: {dist}")
         return "\n".join(lines)
 

@@ -1099,9 +1099,41 @@ def register_admin_handlers(app, settings: Settings, services: dict):
             await _show_admin_home(update)
             raise ApplicationHandlerStop
 
-        # If user clicks a MAIN menu button while still in admin state, exit admin
-        # and let the main router handle it.
-        if text in (texts.MENU_DAY, texts.MENU_PROGRESS, texts.MENU_SETTINGS, texts.MENU_HELP):
+        # If user clicks any user-side navigation button while admin state is still
+        # active, leave admin state and let user handlers process this message.
+        user_nav_escape = {
+            texts.MENU_DAY,
+            texts.MENU_PROGRESS,
+            texts.MENU_SETTINGS,
+            texts.MENU_HELP,
+            texts.DAY_QUOTE,
+            texts.DAY_PIC,
+            texts.DAY_TIP,
+            texts.DAY_BOOK,
+            texts.DAY_FILM,
+            texts.DAY_MOOD,
+            texts.DAY_MATERIALS_NOW,
+            texts.PROGRESS_REFRESH,
+            texts.SETTINGS_TIME,
+            texts.SETTINGS_NAME,
+            texts.SETTINGS_TZ,
+            texts.SETTINGS_REMINDERS,
+            texts.SETTINGS_HABITS,
+            texts.SETTINGS_PERSONAL_REMINDERS,
+            texts.REMINDERS_HUB_HABITS,
+            texts.REMINDERS_HUB_ONCE,
+            texts.HABITS_CREATE,
+            texts.HABITS_LIST,
+            texts.HABITS_EDIT,
+            texts.HABITS_DELETE,
+            texts.REMINDERS_CREATE,
+            texts.REMINDERS_LIST,
+            texts.REMINDERS_EDIT,
+            texts.REMINDERS_DELETE,
+            texts.HELP_NOT_HELPED,
+            texts.HELP_CONTACT_ADMIN,
+        }
+        if text in user_nav_escape:
             state.clear_state(uid)
             return
         payload = st.get("payload_json") or {}
@@ -1263,8 +1295,40 @@ def register_admin_handlers(app, settings: Settings, services: dict):
         if not st or st.get("step") != ADMIN_WIZARD_STEP:
             return
 
-        # Allow leaving admin wizard by pressing main menu sections.
-        if text in (texts.MENU_DAY, texts.MENU_PROGRESS, texts.MENU_SETTINGS, texts.MENU_HELP):
+        # Allow leaving admin wizard by pressing user-side navigation buttons.
+        user_nav_escape = {
+            texts.MENU_DAY,
+            texts.MENU_PROGRESS,
+            texts.MENU_SETTINGS,
+            texts.MENU_HELP,
+            texts.DAY_QUOTE,
+            texts.DAY_PIC,
+            texts.DAY_TIP,
+            texts.DAY_BOOK,
+            texts.DAY_FILM,
+            texts.DAY_MOOD,
+            texts.DAY_MATERIALS_NOW,
+            texts.PROGRESS_REFRESH,
+            texts.SETTINGS_TIME,
+            texts.SETTINGS_NAME,
+            texts.SETTINGS_TZ,
+            texts.SETTINGS_REMINDERS,
+            texts.SETTINGS_HABITS,
+            texts.SETTINGS_PERSONAL_REMINDERS,
+            texts.REMINDERS_HUB_HABITS,
+            texts.REMINDERS_HUB_ONCE,
+            texts.HABITS_CREATE,
+            texts.HABITS_LIST,
+            texts.HABITS_EDIT,
+            texts.HABITS_DELETE,
+            texts.REMINDERS_CREATE,
+            texts.REMINDERS_LIST,
+            texts.REMINDERS_EDIT,
+            texts.REMINDERS_DELETE,
+            texts.HELP_NOT_HELPED,
+            texts.HELP_CONTACT_ADMIN,
+        }
+        if text in user_nav_escape:
             state.clear_state(uid)
             return
 
@@ -1341,11 +1405,19 @@ def register_admin_handlers(app, settings: Settings, services: dict):
             else:
                 await _show_admin_home(update)
             raise ApplicationHandlerStop
-        payload = st["payload_json"]
+        payload = st.get("payload_json") or {}
         if isinstance(payload, str):
-            payload = json.loads(payload)
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
         mode = payload.get("mode")
         mode_s = str(mode or "").lower()
+        if not mode_s:
+            state.clear_state(uid)
+            return
 
         # Quick action buttons should switch wizard mode and never be treated as step input.
         if mode_s.startswith("l_"):
