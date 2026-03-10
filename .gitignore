@@ -26,3 +26,7 @@ generated/
 .mypy_cache/
 *.sqlite3
 *.db
+
+# Internal assistant/dev docs (not for public repo)
+AGENTS.md
+docs/
